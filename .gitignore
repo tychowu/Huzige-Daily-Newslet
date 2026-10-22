@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# 运行产物
+cards/
+out/
+*.png
+!assets/wechat-qr.png
+
+# 编辑器 / 系统
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# 环境
+.env
+.env.local
