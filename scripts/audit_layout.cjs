@@ -128,6 +128,34 @@ const AUDIT = () => {
     }
   });
 
+  /* ---------- 1b. 跨层级压盖：结论条 / 口径注行 vs 最后一条讯息 ----------
+     上面第 1 项只在**同一个父节点**下两两求交。.strip 与 .items 是 .page 的
+     兄弟子元素，.strip 与最后一条 .item 更不是兄弟 —— 所以「结论条压住
+     最后一条讯息」这种事故，第 1 项永远抓不到。
+     2026-10-22 实测就中招了：结论条与最后一条白色卡片重叠 26–28px，
+     肉眼能看见文字被压掉半行，体检却全绿。
+     这里补一条纵向序列检查：.items 内最后一条 .item 的底边，
+     必须落在 .strip 顶边之上。 */
+  const itemsBox = page && page.querySelector('.items');
+  const stripBox = page && page.querySelector('.strip');
+  if (itemsBox && stripBox) {
+    const itemEls = [...itemsBox.querySelectorAll(':scope > .item')];
+    if (itemEls.length) {
+      const last = itemEls[itemEls.length - 1].getBoundingClientRect();
+      const st = stripBox.getBoundingClientRect();
+      const gap = Math.round(st.top - last.bottom);
+      if (gap < 0) {
+        out.overlap.push({
+          a: 'div.item(最后一条)', b: 'div.strip', ox: 0, oy: -gap, in: 'div.page',
+        });
+      } else if (gap < 12) {
+        out.whitespace.push({
+          target: 'item→strip 间距', h: gap, fill: +(gap / 18).toFixed(2),
+        });
+      }
+    }
+  }
+
   /* ---------- 2. 留白：视觉件列内部被子元素吃掉的比例 ---------- */
   page.querySelectorAll('.it-r').forEach((vbox) => {
     const br = vbox.getBoundingClientRect();
@@ -165,9 +193,13 @@ const AUDIT = () => {
       ratio = filled / area(tr);
     }
     const info = { target: name(target), h: Math.round(tr.height), fill: +ratio.toFixed(2) };
-    // 记录全部，低于阈值才算问题。发霉的是那种「整页下半张全是空的」，
-    // 视觉块之间有留白是呼吸感，不是病
-    out.whitespace.push(info);
+    // —— steps 视觉件豁免留白判定 ——
+    // 2026-10-22 胡子哥要求：「这样的排版要杜绝，中间太空，顶底压边。
+    // 可以调整到居中，上下留空。」所以 steps 现在是**故意**上下留空的：
+    // 节点组垂直居中、连接线固定 32px，容器再高也不会被填满。
+    // 它的填充率天然低（实测 46%），这不是留白病，正是要的效果 —— 必须豁免，
+    // 否则每天都会报一条「留白过多」，久了就没人看体检报告了。
+    if (!target.classList.contains('mn-steps')) out.whitespace.push(info);
   });
 
   /* ---------- 3. 截断 / 4. 小字 / 5. 对比度 ---------- */

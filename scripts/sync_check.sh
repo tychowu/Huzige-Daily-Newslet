@@ -48,8 +48,11 @@ blob_sha() {
 }
 
 # 参与同步的本地文件（与发布范围一致）
+# 注意：pycache 在 scripts/ 下，`-not -path './__pycache__/*'` 挡不住
+# （路径前缀对不上）；`-not -name` 也不行（那只匹配文件自身，不匹配目录内容）。
+# 正解是 `-not -path '*/__pycache__/*'` —— 任意层级的 __pycache__ 目录都挡掉。
 LOCAL_FILES=$(cd "$SKILL_DIR" && find . -type f \
-  -not -path './.git/*' -not -path './__pycache__/*' -not -name '.DS_Store' \
+  -not -path './.git/*' -not -path '*/__pycache__/*' -not -name '.DS_Store' \
   -not -path './scripts/legacy/*' -not -name 'RELEASE_NOTES.md' \
   | sed 's|^\./||' | sort)
 

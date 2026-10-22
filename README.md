@@ -1,9 +1,9 @@
 # Huzige Daily Newslet
 
-《胡子哥财经晨报》生产流水线 —— 每天 4 张朋友圈竖版卡片，**数据 → HTML → PNG → 版面体检**一条龙。
+《胡子哥财经晨报》生产流水线 —— 每天 4 张竖版卡片，**数据 → HTML → PNG → 版面体检**一条龙。
 
 面向香港保险潜在客户的跨境财富简报。读者在手机上看，不在电脑上看 —— 所以所有字号、栅格、
-配色都按「朋友圈 2×2 缩略图 + 点开全图」两个场景校准过。
+配色都按**整幅长图在手机上读得清**校准过，不假设任何二次裁切。
 
 ```
 ┌─────────────────────────────┐
@@ -85,20 +85,32 @@ cd ~ && npm i playwright && npx playwright install chromium
 # 2. 复制模板，填这一期的数据
 cp templates/data.template.json <你的工作目录>/data.json
 
-# 3. 数据 → 4 个单文件 HTML（含文案预检 + 竖向预算自动分配）
-python3 scripts/build_cards.py data.json -o cards/
-
-# 4. HTML → PNG
-node scripts/render.cjs cards/
-
-# 5. 版面体检（九项检查）
-node scripts/audit_layout.cjs cards/
-
-# 6. 朋友圈四图缩略预览（验证裁切）
-node scripts/preview_grid.cjs cards/
+# 3. 一条命令跑完：算账 → 重建 → 渲染 → 体检 → 估算对照
+./scripts/make.sh
 ```
 
-跑完 `cards/` 里会有 4 个 HTML + 4 个 PNG + 1 张 `grid-preview.png`。
+跑完 `cards/` 里会有 4 个 HTML + 4 个 PNG（`card-01.png` ~ `card-04.png`）——**这就是全部交付物**。
+
+`make.sh` 会自动探测 node / python 路径，失败即停，只给摘要。四种用法：
+
+| 命令 | 作用 |
+|---|---|
+| `./scripts/make.sh` | 全流程 |
+| `./scripts/make.sh plan` | 只看竖向预算账，不动文件 |
+| `./scripts/make.sh dry` | 只跑文案预检，不写 HTML |
+| `./scripts/make.sh 4` | 只处理第 4 张 |
+
+想分步跑（或改脚本本身时）：
+
+```bash
+python3 scripts/build_cards.py data.json -o cards/   # 数据 → HTML（含预检 + 预算分配）
+node scripts/render.cjs cards/                       # HTML → PNG
+node scripts/audit_layout.cjs cards/                 # 版面体检（九项）
+node scripts/doctor.cjs cards/ --verbose             # 真实行数 / 留白 / 标签配色
+python3 scripts/doctor.py data.json cards/           # 预算账 vs 实测，逐项对照
+```
+
+**排查问题时先跑现成工具，不要临时写量测脚本** —— `make.sh` / `doctor.*` 覆盖了九成排查动作。
 
 ---
 
@@ -180,15 +192,20 @@ references/
   visual-spec.md             视觉规范：色板、栅格、字号、语义标签、七种视觉件、竖向预算
   checklist.md               发布前逐项打勾清单 + 四张卡专项 + 同步自查 + 合规红线
 scripts/
+  make.sh                    一键流水线：算账 → 重建 → 渲染 → 体检 → 诊断（自动探测 node/python）
   build_cards.py             数据 → 4 个单文件 HTML（文案预检 + 竖向预算分配）
+                               --plan 只看预算账 / --dry 只预检 / --only N 只重建第 N 张
   render.cjs                 HTML → PNG（1080 视口 / 2× 导出 / fullPage）
   audit_layout.cjs           版面体检：遮挡/留白/吃字/截断/小字/对比度/重复/溢出/行内重叠
-  preview_grid.cjs           4 张 PNG → 朋友圈 2×2 裁切预览
+  doctor.cjs                 量测：真实行数、溢出像素、留白、steps 对称性、标签配色与对比度
+  doctor.py                  预算账 vs 浏览器实测逐项对照（est N 行 / 实测 M 行）
   sync_check.sh              同步自查：本地 vs GitHub 最新 Release（逐文件 blob sha 比对）
   publish.sh                 发一版：同步→确认→bump→tag→push→Release→核验三项
+  publish_brief.py           出图 → 上传 COS → 校验公网 URL → Server酱 推微信
+  next_issue.py              期次归档与编号递增
   legacy/build_brief.py      早期「单张长图」版本，已停用，仅留档
 templates/
-  data.template.json         四卡数据模板（含 14 条填写说明与 points 样例）
+  data.template.json         四卡数据模板（含 21 条填写说明与 prose 正文样例）
 assets/
   wechat-qr.png              footer 二维码；缺图时脚本只警告不报错
 ```
@@ -214,19 +231,31 @@ assets/
 - **大数字必须做宽度兜底**：「109.16 美元」用 104px 会横向溢出 24px。
 - **按比例分配必须逐条封顶**：`give = min(head[i], ...)`，否则一条会抢走全部富余。
 - **小字是四图的头号隐形杀手**：19–21px 在 1080 画布上看着还行，手机上只有 6.8–7.6pt。
+- **`find` 排除目录要写 `-not -path '*/__pycache__/*'`**：`./__pycache__/*` 只挡根目录，
+  实际 pycache 在 `scripts/` 下会漏掉；`-not -name '__pycache__'` 也不行（只匹配文件自身，
+  不匹配目录内容）。`sync_check.sh` 踩过这个坑。
+- **冒烟测试脚本要跟随模板形态**：模板从 desc 模式改成 prose 模式后，
+  「给所有条目补 desc」的旧脚本会触发 prose+desc 冲突告警。补之前先判 `if not prose and not desc`。
 
 ---
 
-## 四图裁切的绕不开的代价
+## 整幅阅读，不假设二次裁切
 
-朋友圈四图是 2×2 正方形缩略图，每张**只显示中心 1:1 区域**。总高 1735 时可见区间是
-正文页 y ∈ [205, 1286]，意味着：
+每一张图都是一张**独立可读的长图**。图可能被放在任何位置、被任何客户端以任何方式缩放，
+所以版面不依赖「用户点开就能看到全部」这个假设。
 
-- **主标题在缩略图里被整条切掉**
-- 视觉件与核心数字必须落在 206–1286，最下方 154px 会被裁
-- banner 与 footer 在缩略图里看不到，点开才看得到
+由此定下三条：
 
-`preview_grid.cjs` 按微信真实裁切规则拼出 4 格预览，**不要凭想象判断哪段会被裁掉**。
+- **主标题是每张图的第一眼** —— 在正文页顶部，单行，字号 34–52px 自适应
+- **核心数字必须在视觉件里** —— 不靠「反正底部会被裁」来安排位置
+- **banner 与 footer 都是内容** —— 不是装饰，也不是留白
+
+早期整套版面是按「朋友圈 2×2 缩略图只显示中心 1:1」校准的，于是推出过两条错误结论：
+「主标题会被切掉」和「核心数字必须落在 206–1286」。这个渠道假设已经不成立，
+那两条结论连同大片预留死区一起作废。
+
+> 将来要发到某个会二次裁切的渠道，**不要改回旧逻辑**——另出一版适配那个渠道的图，
+> 而不是让主图迁就某一个渠道的裁切规则。
 
 ---
 
