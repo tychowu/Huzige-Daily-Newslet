@@ -352,7 +352,120 @@ footer 的 19px 是唯一例外——它是法定声明，压到 22px 会把 foo
 **绿只给「跌」用**：标签里不许再出现任何绿色，否则读者会把「风险」误读成「跌」。
 **涨跌配色遵守中国习惯**：涨＝红 `#B3261E`，跌＝绿 `#1E7B4E`。
 
+## 版本发布规则（元规则，优先于执行流程）
+
+> 2026-10-22 立。本节管的是「这个 skill 自己怎么改、怎么发」，不是卡片怎么做。
+
+**仓库**：https://github.com/tychowu/Huzige-Daily-Newslet （Public，MIT）
+**本机源目录**：`~/.workbuddy/skills/global-finance-newslet/` —— **唯一的改动入口**
+**git 工作副本**：`~/.workbuddy/skills/.repos/global-finance-newslet/` —— 发布脚本自动维护，不要手改
+
+### 三条铁律
+
+1. **改只在本地做**。任何改动都改本机源目录，**不直接改 git 仓库、不在 GitHub 上编辑**。
+2. **确认后才上传**。改完先给用户看，等明确说了「发布／发版／推一下」再跑 `publish.sh`。
+   改 ≠ 发布。
+3. **每次上传必须更新 Release 版本**。只推 tag 不建 Release 视为没发完。
+   本仓库没配 GitHub Actions，推 tag 不会自动建 Release，必须手动建。
+
+### 每次跑这个 skill 之前，先自查
+
+```bash
+bash ~/.workbuddy/skills/global-finance-newslet/scripts/sync_check.sh
+```
+
+它逐文件比对本地 skill 目录与 GitHub 最新 Release 的 blob sha（不是只看版本号），
+告诉你**哪里不一致**：
+
+| 输出 | 含义 | 怎么办 |
+|---|---|---|
+| `✅ 已同步` | 本地与远端完全一致 | 正常跑 |
+| `⚠️ 内容不同` | 改了东西没发布 | 确认改动 → 发一版 |
+| `⚠️ 仅本地有` | 新增文件没进仓库 | 同上 |
+| `⚠️ 仅远端有` | 远端有本地没有的文件 | 可能是别人改过，或本地被覆盖 → 先查清 |
+| `版本号相同但内容不同` | **改了东西忘了 bump 版本号** | bump 后再发 |
+
+退出码：`0` 已同步 / `1` 有差异 / `2` 检查失败（网络或仓库不可达）。
+
+**自查不通过就先别跑流水线** —— 用的是旧版代码，出的图和文档对不上。
+
+### 发布流程
+
+```bash
+# 1. 先在本地改（改 ~/.workbuddy/skills/global-finance-newslet/）
+# 2. 确认改动 → 演一遍
+bash ~/.workbuddy/skills/global-finance-newslet/scripts/publish.sh --dry-run
+
+# 3. 正式发（会问版本号、要求确认）
+bash ~/.workbuddy/skills/global-finance-newslet/scripts/publish.sh
+
+# 4. 核验同步已恢复
+bash ~/.workbuddy/skills/global-finance-newslet/scripts/sync_check.sh
+```
+
+`publish.sh` 做的事：把本地 skill 目录 rsync 进工作副本 → 列出改动让你确认 →
+bump `VERSION` → 提交 → 打 tag → 推送 main 与 tag → 建 Release → **核验三项**。
+
+**核验三项，缺一即发布未完成**：
+
+1. 推送成功（本地 HEAD == 远端 main）
+2. tag 已在远端
+3. Release 存在（先 `gh release view` 查重再补，别凭印象说「没建」）
+
+### 版本号规则
+
+`x.y.z`（semver），写在 `VERSION` 文件里。
+
+| 改动类型 | 版本位 | 例子 |
+|---|---|---|
+| 修 bug、改文案、改版面参数 | patch | 1.0.0 → 1.0.1 |
+| 加功能、加文档章节、加脚本 | minor | 1.0.1 → 1.1.0 |
+| 改结构、破坏兼容（如卡片结构重排） | major | 1.1.0 → 2.0.0 |
+
+**改了内容就必须 bump 版本号** —— 这正是 `sync_check.sh` 报
+「版本号相同但内容不同」时提醒的那件事。版本号不变就发布，别人拉下来拿到的
+是「内容变了但版本号没变」的包，没法判断新旧。
+
+### 改规则的连带同步（最容易漏的一步）
+
+**改了一条规则，必须 grep 全库确认没有残留**：
+
+```bash
+cd ~/.workbuddy/skills/global-finance-newslet
+grep -rE "旧规则关键词" . --include="*.md" --include="*.json" --include="*.py" --include="*.cjs" --include="*.sh"
+```
+
+要同步的地方有 **5 处**，少一处就会留下「文档说 A、代码做 B」：
+
+| # | 位置 | 说明 |
+|---|---|---|
+| 1 | `SKILL.md` | 主文档 |
+| 2 | `references/*.md`（三份） | SOP / 视觉规范 / 检查清单 |
+| 3 | `templates/data.template.json` | **模板 —— 下一期真正会用的东西** |
+| 4 | `scripts/*.py` `*.cjs` `*.sh` | 代码与注释 |
+| 5 | `README.md` | GitHub 首页 |
+
+> 已经因此翻车两次：一次是「角标只写段落名」只改了生产 `data.json`，
+> 模板和文档还写着「· 机制」；一次是模板的 `ring` 视觉件还留着已废弃的 `inner` 字段。
+> **模板不是文档的附属品，是生产入口。**
+
+### 本机源目录是权威源
+
+- 改动只发生在 `~/.workbuddy/skills/global-finance-newslet/`
+- git 工作副本由 `publish.sh` 自动 rsync 覆盖，**不要手改它**（会被覆盖）
+- GitHub 上看到的内容是本地的镜像，反过来不成立
+
 ## 工作流
+
+### 第 0 步：同步自查（约 10 秒）—— 每次跑之前必做
+
+```bash
+bash ~/.workbuddy/skills/global-finance-newslet/scripts/sync_check.sh
+```
+
+确认本机 skill 目录与 GitHub 最新 Release 一致。**不一致就先别跑流水线** ——
+用的是旧代码，出的图和文档对不上。退出码 `0` 才继续，`1` 表示有差异（按
+「版本发布规则」处理），`2` 表示查不到远端。
 
 ### 第 1 步：取数（约 10 分钟）
 

@@ -19,6 +19,63 @@
 
 ---
 
+## 跑之前先自查同步
+
+```bash
+bash scripts/sync_check.sh
+```
+
+逐文件比对本地与 GitHub 最新 Release 的 blob sha（不只是看版本号），
+告诉你**哪里不一致**：
+
+```
+ ✅ 已同步 —— 本地与 GitHub 最新 Release 完全一致
+ ⚠️  内容不同（2）：~ SKILL.md  ~ references/checklist.md
+ ⚠️  仅本地有（1）：+ scripts/publish.sh
+```
+
+退出码 `0` 已同步 / `1` 有差异 / `2` 查不到远端。
+
+**这是「用哪版代码产出」的守门闸** —— 不一致就说明你跑的是旧逻辑，
+出的图和文档对不上。差异的处理见下面「版本发布规则」。
+
+---
+
+## 版本发布规则
+
+**三条铁律**
+
+1. **改只在本地做** —— 改本机 skill 目录，不直接改 git 仓库、不在 GitHub 上编辑
+2. **确认后才上传** —— 改完先确认，等明确指令再发布。改 ≠ 发布
+3. **每次上传必须更新 Release 版本** —— 只推 tag 不建 Release 视为没发完
+
+**发布**
+
+```bash
+# 1. 改本机目录
+# 2. 演一遍
+bash scripts/publish.sh --dry-run
+
+# 3. 正式发（会问版本号、要求确认）
+bash scripts/publish.sh
+
+# 4. 核验
+bash scripts/sync_check.sh
+```
+
+`publish.sh` 把本地目录同步进工作副本 → 列出改动 → bump `VERSION` → 提交 → 打 tag →
+推送 → 建 Release → **核验三项**（推送成功 / tag 在远端 / Release 存在，缺一即未完成）。
+
+**版本号**：semver，写在 `VERSION` 文件。修 bug → patch（1.0.0→1.0.1）；
+加功能 → minor；改结构 → major。**改了内容就必须 bump** —— 否则别人拉到的包
+「内容变了但版本号没变」，没法判断新旧。
+
+**改规则的连带同步（最容易漏）**：改一条规则要 grep 全库确认无残留，
+共 5 处：`SKILL.md` / 三份 `references/*.md` / **`templates/data.template.json`** /
+代码与注释 / `README.md`。模板不是文档的附属品，是生产入口。
+
+---
+
 ## 快速开始
 
 ```bash
@@ -116,16 +173,19 @@ note 少算 38px，最后一条讯息被下面的角标压掉一截。
 ## 目录结构
 
 ```
-SKILL.md                     主文档：硬约束、结构、版式、算法、6 步工作流、踩坑记录
+SKILL.md                     主文档：硬约束、结构、版式、算法、6 步工作流、发布规则、踩坑记录
+VERSION                      当前版本号（x.y.z），发布时自动 bump
 references/
   sop-full.md                栏目方法论：定位、选题筛子、取数口径、保险税务写法
   visual-spec.md             视觉规范：色板、栅格、字号、语义标签、七种视觉件、竖向预算
-  checklist.md               发布前逐项打勾清单 + 四张卡专项 + 合规红线
+  checklist.md               发布前逐项打勾清单 + 四张卡专项 + 同步自查 + 合规红线
 scripts/
   build_cards.py             数据 → 4 个单文件 HTML（文案预检 + 竖向预算分配）
   render.cjs                 HTML → PNG（1080 视口 / 2× 导出 / fullPage）
   audit_layout.cjs           版面体检：遮挡/留白/吃字/截断/小字/对比度/重复/溢出/行内重叠
   preview_grid.cjs           4 张 PNG → 朋友圈 2×2 裁切预览
+  sync_check.sh              同步自查：本地 vs GitHub 最新 Release（逐文件 blob sha 比对）
+  publish.sh                 发一版：同步→确认→bump→tag→push→Release→核验三项
   legacy/build_brief.py      早期「单张长图」版本，已停用，仅留档
 templates/
   data.template.json         四卡数据模板（含 14 条填写说明与 points 样例）

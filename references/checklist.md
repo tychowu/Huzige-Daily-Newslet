@@ -7,12 +7,36 @@
 ```bash
 node ~/.workbuddy/skills/global-finance-newslet/scripts/audit_layout.cjs cards/
 ```
-
 它查的是目测最容易漏的九项：遮挡、留白（视觉件内部填充率）、省略号吃字、**行内重叠**（`grid-auto-rows:1fr` 压扁导致数值行压在名称行上）、裁剪截断、小字（<22px）、对比度（WCAG AA）、信息重复（文字区重报视觉件数字）、**溢出**（视觉件内容顶出容器）。
 
 > 「行内重叠」这一项是 2026-10-21 补的。之前十项指标网格叠字时，
 > 每一行文字自己都没超出父容器，所以「截断」抓不到，只有专门查
 > `.gc / .mx-row / .ms-node / .rs-row / .mb-row` 的 `scrollHeight` 才抓得住。
+
+## skill 自身同步自查（每次跑之前）
+
+**这是元清单 —— 跑这个 skill 之前先过这一关，产出用的代码版本必须和 GitHub 一致。**
+
+```bash
+bash ~/.workbuddy/skills/global-finance-newslet/scripts/sync_check.sh
+```
+
+- [ ] **同步自查退出码为 0**（`✅ 已同步`）。退出码 1 = 有差异，先处理再跑流水线
+- [ ] 如果报「仅远端有」：查清是不是别人改过、或者本地文件被覆盖了，**不要盲目覆盖回去**
+- [ ] 如果报「版本号相同但内容不同」：改了东西忘了 bump 版本号，先改 `VERSION`
+
+## 发布到 GitHub 时（改完 skill 本身才需要）
+
+- [ ] 改动只发生在**本机源目录** `~/.workbuddy/skills/global-finance-newslet/`，没手改 git 工作副本
+- [ ] **已经给用户确认过改动内容**，得到「发布／发版／推一下」这类明确指令
+- [ ] `publish.sh --dry-run` 跑过，列出的改动清单与预期一致
+- [ ] `VERSION` 已 bump（patch / minor / major 按改动性质选）
+- [ ] **改规则的连带同步已 grep 全库**（`SKILL.md` + 三份 references + **模板** + 代码注释 + `README.md`），
+      旧规则关键词零残留
+- [ ] 模板 `templates/data.template.json` 与生产数据一致（模板才是下一期真正会用的东西）
+- [ ] 发布后 `sync_check.sh` 退出码回到 0
+- [ ] **核验三项齐全**：推送成功 / tag 在远端 / Release 存在
+- [ ] Release 说明里写清这版改了什么
 
 ## 通用清单
 
