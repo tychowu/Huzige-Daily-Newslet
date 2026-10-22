@@ -22,6 +22,7 @@ publish_brief.py —— 《胡子哥财经晨报》每日出图 → 上传公网
 退出码：0 = 成功；2 = 配置缺失；3 = 上传失败；4 = 推送失败但图已上线
 """
 import argparse
+import datetime
 import json
 import os
 import sys
@@ -74,7 +75,14 @@ def load_sct_conf():
 
 # ── 1. 收集当期图 ────────────────────────────────────────────────
 def collect_cards(workdir):
-    """收集当期 4 张图。交付物就是这 4 张，没有拼版预览。"""
+    """收集当期 4 张图。交付物就是这 4 张，没有拼版预览。
+
+    **同时校验「图是不是本期产的」**：以前只认文件名，不看时间 ——
+    一旦当期渲染失败，cards/ 里残留的上一期旧图会被配上当天日期
+    推出去，期号是新的、内容是旧的，从消息里根本看不出来。
+    判据：PNG 不能比 data.json 旧。流程固定是「先填 data.json、再渲染」，
+    出图必然晚于内容；图比内容还旧，只能说明没重新渲染。
+    """
     cards_dir = os.path.join(workdir, "cards")
     if not os.path.isdir(cards_dir):
         fail(f"找不到卡片目录 {cards_dir}", 2)
@@ -84,6 +92,19 @@ def collect_cards(workdir):
         if not os.path.exists(p):
             fail(f"缺图：{p} —— 先跑 render.cjs", 2)
         pngs.append(p)
+
+    # 陈旧校验（2 秒容差，避开文件系统时间精度）
+    dj = os.path.join(workdir, "data.json")
+    if os.path.exists(dj):
+        ref = os.path.getmtime(dj)
+        stale = [os.path.basename(p) for p in pngs
+                 if os.path.getmtime(p) < ref - 2]
+        if stale:
+            fail("以下图比 data.json 还旧，是上一期残留（渲染多半失败了）：\n  "
+                 + "\n  ".join(stale)
+                 + "\n\n先跑 make.sh 重新出图，不要推旧图。"
+                 + "\n若确认旧图无误、只是补推，先 touch cards/card-0*.png 再跑。", 2)
+
     return pngs
 
 

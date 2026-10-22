@@ -564,13 +564,23 @@ python3 ~/.workbuddy/skills/global-finance-newslet/scripts/next_issue.py \
 
 **编号必须由脚本算，不要自己编。** 断更、补更、手动重跑都会让编号和实际出过的期数对不上。
 
-这一条命令做三件事：
+这一条命令做四件事：
 
 1. 把上一期的 `data.json` 归档成 `data_YYYYMMDD.json`（**空骨架不归档** —— 上一轮中途断了留下的空壳不该占一个期号）
 2. 算出这一期该用的编号并打印（扫 `data.json` + 归档文件 + `archive.json` 三处取期号）
-3. 把 `data.json` **重置成这一期的空骨架**（写好 `meta.issue` / `meta.date`，内容留空待填）
+3. **把上一期残留的卡片产物挪进 `cards/.prev/`**（只留一份，每次覆盖）
+4. 把 `data.json` **重置成这一期的空骨架**（写好 `meta.issue` / `meta.date`，内容留空待填）
 
-第 3 步很重要：归档后 `data.json` 里还留着上一期的 `meta`。不重置的话，
+第 3 步是防「旧图当新期发」的闸门。`publish_brief.py` 只认
+`card-01..04.png` 这四个文件名，不看时间 —— 当期渲染一旦失败，
+残留的上一期图片会被配上当天日期推出去，期号是新的、内容是旧的，
+从推送消息里根本看不出来。挪走而不是删掉，判断失误时还能捞回来
+（`.prev/` 不在顶层，不会被扫到）。
+
+`publish_brief.py` 还有第二道闸：**PNG 比 `data.json` 旧就拒发**（容差 2 秒）。
+两道闸都指向同一个事实：`--start` 跑完到出图之间，`cards/` 里不该有任何东西。
+
+第 4 步很重要：归档后 `data.json` 里还留着上一期的 `meta`。不重置的话，
 agent 拿到新编号后容易「在旧内容上改一改」，把上一期改个日期又发一遍。
 骨架里 `meta._待填` 会写明四张卡分别是什么，填之前先看一眼模板。
 
@@ -581,8 +591,10 @@ agent 拿到新编号后容易「在旧内容上改一改」，把上一期改�
 
 ```bash
 python3 ~/.workbuddy/skills/global-finance-newslet/scripts/next_issue.py \
-  --workdir <工作目录> --close --issue No.XXX
+  --workdir <工作目录> --close --issue <第 0.5 步打印的编号>
 ```
+
+`--issue` 要填**脚本实际打印的编号**（如 `No.001`），不要照抄文档里的字面。
 
 ### 第 1 步：取数（约 10 分钟）
 

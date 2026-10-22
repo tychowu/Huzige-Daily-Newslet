@@ -9,9 +9,10 @@ next_issue.py —— 期次归档与编号递增
   data.json            —— 当前正在做的这一期
   data_YYYYMMDD.json   —— 历史归档，一期一个
   archive.json         —— 期次台账（编号 / 日期 / 三个 md 文件名 / 状态）
+  cards/.prev/         —— 上一期的卡片产物（--start 时自动挪进来，只留一份）
 
 用法：
-  # 1) 开新一期：归档当前 data.json，返回新一期该用的编号与日期
+  # 1) 开新一期：归档当前 data.json、清走上一期旧图、返回新一期编号与日期
   python3 next_issue.py --workdir <工作目录> --start
 
   # 2) 只查：看看下一期该用几号
@@ -24,6 +25,7 @@ next_issue.py —— 期次归档与编号递增
 """
 import argparse
 import datetime
+import glob
 import json
 import os
 import re
@@ -147,6 +149,40 @@ def archive_current(workdir, issues):
     return dest
 
 
+def stash_prev_cards(workdir):
+    """把上一期残留的卡片产物挪进 cards/.prev/，给新一期腾干净。
+
+    **为什么必须做**：publish_brief.py 的 collect_cards() 只检查
+    card-01..04.png 这四个名字**存不存在**，不校验是不是当天产的。
+    一旦这一期渲染失败（预算爆表、data.json 填错），残留的上一期旧图
+    会被配上当天日期推出去 —— 期号是新的、内容是旧的，而且看不出破绽。
+    2026-10-22 就差点踩到：当晚 cards/ 里躺着预演图，明早渲染一失败
+    就会把预演内容当正式首期发出去。
+
+    **不删只挪**：移到 cards/.prev/（每次覆盖上一份）。这样做判断失误时
+    还能捞回来；collect_cards() 只认 cards/ 顶层的固定文件名，不会被它扫到。
+    """
+    cards_dir = os.path.join(workdir, "cards")
+    if not os.path.isdir(cards_dir):
+        return None
+    olds = sorted(glob.glob(os.path.join(cards_dir, "card-0*.png")) +
+                  glob.glob(os.path.join(cards_dir, "card-0*.html")))
+    if not olds:
+        log("  [跳过] cards/ 里没有旧产物")
+        return None
+    prev = os.path.join(cards_dir, ".prev")
+    if os.path.isdir(prev):
+        shutil.rmtree(prev)
+    os.makedirs(prev)
+    for p in olds:
+        try:
+            shutil.move(p, os.path.join(prev, os.path.basename(p)))
+        except Exception as e:
+            log(f"  [WARN] 挪不动 {os.path.basename(p)}: {str(e)[:60]}")
+    log(f"  [OK] 旧产物已移入 cards/.prev/（{len(olds)} 个文件）")
+    return prev
+
+
 def reset_data_json(workdir, issue, date_str):
     """把 data.json 重置成下一期的空骨架。
 
@@ -160,7 +196,7 @@ def reset_data_json(workdir, issue, date_str):
         "meta": {
             "issue": issue,
             "date": date_str,
-            "weekday": "一二三四五六日"[datetime.date.today().weekday()],
+            "weekday": "周" + "一二三四五六日"[datetime.date.today().weekday()],
             "title": "胡子哥财经晨报",
             "title_en": "GLOBAL BRIEF · DAILY",
             "_待填": "本文件是本期骨架。卡片内容见 templates/data.template.json，"
@@ -247,6 +283,8 @@ def main():
     log(f" 归档文件名 : data_{today.strftime('%Y%m%d')}.json")
 
     if args.start:
+        log("\n→ 清空上一期残留的卡片产物")
+        stash_prev_cards(workdir)
         log("\n→ 重置 data.json 为新一期骨架")
         reset_data_json(workdir, issue, date_str)
     else:
