@@ -25,3 +25,6 @@ out/
 # 环境
 .env
 .env.local
+
+# Release 说明：一次性文件，发完即删，不进版本库
+RELEASE_NOTES.md

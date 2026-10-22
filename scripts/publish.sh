@@ -131,6 +131,13 @@ fi
 echo "$VERSION_ARG" > "$SKILL_DIR/VERSION"
 cp "$SKILL_DIR/VERSION" "$CLONE/VERSION"
 
+# Release 说明是一次性文件：发布前可以写，publish.sh 用完会删掉。
+# 没写就用 GitHub 自动生成的提交列表兜底。
+if [ ! -f "$SKILL_DIR/RELEASE_NOTES.md" ]; then
+  echo "ℹ️  没有 RELEASE_NOTES.md —— Release 说明将用 GitHub 自动生成的提交列表"
+  echo "   （想自定义说明：先写 ~/.workbuddy/skills/global-finance-newslet/RELEASE_NOTES.md）"
+fi
+
 # ── 5. 提交 + 打 tag + 推送 ──────────────────────────────────────
 git add -A
 COMMIT_MSG="v${VERSION_ARG}：$(cd "$SKILL_DIR" && git --no-pager log -1 --pretty=%s 2>/dev/null || echo "发布 ${VERSION_ARG}")"
@@ -148,9 +155,15 @@ git push -q origin "v${VERSION_ARG}" || fail "推送 tag 失败"
 if gh release view "v${VERSION_ARG}" --repo "$REPO" >/dev/null 2>&1; then
   echo "→ Release 已存在（可能是 Actions 自动建的），跳过创建"
 else
+  # Release 说明是**一次性**的：源目录里的 RELEASE_NOTES.md 用完即删，
+  # 不该留在仓库里（它只描述那一版的改动，下一版就过期了）。
   NOTES="$SKILL_DIR/RELEASE_NOTES.md"
   if [ -f "$NOTES" ]; then
-    gh release create "v${VERSION_ARG}" --repo "$REPO" --title "v${VERSION_ARG}" --notes-file "$NOTES" || fail "创建 Release 失败"
+    gh release create "v${VERSION_ARG}" --repo "$REPO" --title "v${VERSION_ARG}" --notes-file "$NOTES" \
+      || fail "创建 Release 失败"
+    rm -f "$NOTES"
+    rm -f "$CLONE/RELEASE_NOTES.md"
+    echo "→ 已用掉 RELEASE_NOTES.md（一次性文件，不留在仓库）"
   else
     gh release create "v${VERSION_ARG}" --repo "$REPO" --title "v${VERSION_ARG}" \
       --generate-notes || fail "创建 Release 失败"

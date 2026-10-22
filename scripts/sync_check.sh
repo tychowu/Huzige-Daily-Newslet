@@ -50,7 +50,8 @@ blob_sha() {
 # 参与同步的本地文件（与发布范围一致）
 LOCAL_FILES=$(cd "$SKILL_DIR" && find . -type f \
   -not -path './.git/*' -not -path './__pycache__/*' -not -name '.DS_Store' \
-  -not -path './scripts/legacy/*' | sed 's|^\./||' | sort)
+  -not -path './scripts/legacy/*' -not -name 'RELEASE_NOTES.md' \
+  | sed 's|^\./||' | sort)
 
 DIFFS=""
 ONLY_LOCAL=""
